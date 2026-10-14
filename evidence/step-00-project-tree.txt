@@ -1,0 +1,49 @@
+﻿Folder PATH listing
+Volume serial number is F836-96DB
+C:.
+|   .env.example
+|   .gitignore
+|   CHANGELOG.md
+|   main.py
+|   pyproject.toml
+|   README.md
+|   
++---.github
+|   |   copilot-instructions.md
+|   |   pull_request_template.md
+|   |   
+|   +---agents
+|   +---prompts
+|   +---skills
+|   |   +---python-test-standards
+|   |   +---registration-security
+|   |   \---sdlc-documentation
+|   \---workflows
++---docs
+|       .gitkeep
+|       
++---evidence
+|       .gitkeep
+|       step-00-project-tree.txt
+|       
++---input
+|       REG-1-user-story.md
+|       
++---instance
++---src
+|   +---github_copilot_agentic_registration.egg-info
+|   |       dependency_links.txt
+|   |       PKG-INFO
+|   |       requires.txt
+|   |       SOURCES.txt
+|   |       top_level.txt
+|   |       
+|   \---registration_app
+|       |   __init__.py
+|       |   
+|       +---static
+|       \---templates
+\---tests
+    |   .gitkeep
+    |   
+    \---ui
