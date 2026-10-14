@@ -1,0 +1,11 @@
+﻿GitHub Copilot Agentic SDLC Agent Inventory
+============================================
+
+1. requirements-analyst       -> docs/01-requirements.md
+2. solution-architect         -> docs/02-architecture.md
+3. design-reviewer            -> docs/03-design-review.md
+4. implementation-planner     -> docs/04-impl-plan.md
+5. implementer                -> src/ and tests/
+6. code-reviewer              -> docs/05-code-review.md
+7. verifier                   -> docs/06-verification.md
+8. pr-author                  -> docs/07-pr-description.md and PR
