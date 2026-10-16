@@ -8,7 +8,7 @@
 | Author Role | Implementation Planner (Copilot agent) |
 | Commit | Pending before commit |
 | Date | 2026-10-16 |
-| Status | Draft |
+| Status | Approved |
 
 ## 1. Plan Summary
 
@@ -51,7 +51,7 @@ Inspected before naming any file in this plan:
 | ID | Task | Files | Requirement and decision IDs | Blocked by | Done criteria |
 |---|---|---|---|---|---|
 | T1 | Add the Flask-WTF dependency and create the configuration module | `pyproject.toml` (modify: add `Flask-WTF>=1.2,<2.0` to `dependencies`); `src/registration_app/config.py` (new); `tests/test_config.py` (new) | NFR-1, SEC-8, ADD-1, ADD-6, FR-15 | None | `Config` (and a `TestConfig` override) expose `SECRET_KEY`, `DATABASE_PATH`, `WTF_CSRF_ENABLED`, `TESTING`, `DEBUG=False`, `MAX_CONTENT_LENGTH` (16 KB); values are read from environment variables with safe defaults only for non-secret fields; `python -m pytest -q tests/test_config.py` and `ruff check .` both pass |
-| T2 | Create the application-factory skeleton | `src/registration_app/app.py` (new); `tests/test_app.py` (new) | FR-15, NFR-1, ADD-1 | T1 | `create_app(test_config=None)` builds a Flask app from `Config`, applies an optional test-config override, and initializes `CSRFProtect`; no blueprint registered yet; tests confirm the factory returns a configured `Flask` instance and that `TESTING`/`WTF_CSRF_ENABLED` can be overridden; `pytest -q tests/test_app.py` and `ruff check .` pass |
+| T2 | Create the application-factory skeleton | `src/registration_app/app.py` (new); `tests/test_app.py` (new) | FR-15, NFR-1, ADD-1 | T1 | `create_app(test_config=None)` builds a Flask app from `Config`, applies an optional test-config override, and initializes `CSRFProtect`; no blueprint registered yet; tests confirm the factory returns a configured `Flask` instance and that `TESTING`/`WTF_CSRF_ENABLED` can be overridden; confirm `create_app()` has no parameter, environment variable, or code path that allows `TestConfig` to be selected other than an explicit direct call from test fixtures; add a test proving the default factory call never produces `TestConfig` behavior (CSRF remains enabled, `SECRET_KEY` is not the literal test value); `pytest -q tests/test_app.py` and `ruff check .` pass |
 | T3 | Implement the SQLite schema and per-request connection lifecycle | `src/registration_app/db.py` (new); `src/registration_app/app.py` (modify: register `teardown_appcontext(close_db)`); `tests/test_db.py` (new) | NFR-6, NFR-7, SEC-6 | T2 | `get_db()` lazily opens one `sqlite3.Connection` per application/request context on `flask.g`, applies `CREATE TABLE IF NOT EXISTS users (...)` with the `email TEXT NOT NULL UNIQUE` constraint from architecture Section 5, and reuses the same connection on repeated calls within a context; `close_db()` closes it on teardown; tests use `tmp_path` and an app context; `pytest -q tests/test_db.py` and `ruff check .` pass |
 | T4 | Implement validation functions | `src/registration_app/validation.py` (new); `tests/test_validation.py` (new) | FR-5, FR-7, FR-8, FR-9, FR-12, FR-13, FR-14, ADD-4, EC-1–EC-11 | None | Pure functions trim/normalize `full_name`/`email`, leave `password`/`confirm_password` untouched, and enforce every rule in architecture Section 7 (required fields, 100/254/8–128 character boundaries at limit and limit+1, email format, `Cc`-only full-name rejection, password strength, confirmation match); every required validation unit test from the `python-test-standards` skill is present; `pytest -q tests/test_validation.py` and `ruff check .` pass |
 | T5 | Implement the password-hashing helper | `src/registration_app/security.py` (new); `tests/test_security.py` (new) | FR-3, SEC-1 | None | Thin wrapper functions call only Werkzeug `generate_password_hash`/`check_password_hash`; tests confirm the hash differs from the plain password and that verification succeeds for the correct password and fails for an incorrect one; `pytest -q tests/test_security.py` and `ruff check .` pass |
@@ -281,6 +281,16 @@ complete:
   infrastructure is explicitly deferred to the first GitHub Actions run after T12 is approved
   and pushed; that run's result will be recorded as evidence in `docs/06-verification.md`
   (Step 7), not fabricated at planning or implementation time.
+
+## 12. Implementation Deviations Log (recorded during Step 5)
+
+| Task | Deviation from plan | Reason | Reconciliation |
+|---|---|---|---|
+| T1 | `Config.DEBUG` is hardcoded to `False` in `config.py` rather than read from the `FLASK_DEBUG` environment variable. | Strictly enforces design-review decision ADD-1 (DR-1): a non-test configuration must never allow a debug/traceback-exposure path to be toggled via the environment. | `.env.example`'s `FLASK_DEBUG=false` line was kept (not removed) and annotated with a comment stating it is intentionally unused and why, so the template remains accurate documentation rather than a misleading unused control. |
+
+**Forward-looking safety note for T2:** the application factory must not provide any
+environment-variable or request-driven mechanism capable of selecting `TestConfig`. `TestConfig`
+may only be passed explicitly by test fixtures calling the factory directly.
 
 ---
 
