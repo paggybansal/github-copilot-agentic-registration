@@ -8,7 +8,7 @@
 | Author Role | Requirements Analyst (Copilot agent) |
 | Commit | Pending before commit |
 | Date | 2026-10-16 |
-| Status | Draft |
+| Status | Approved |
 
 ## 1. Scope
 
