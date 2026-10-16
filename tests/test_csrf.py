@@ -93,7 +93,19 @@ def test_register_post_tampered_csrf_token_rejected(csrf_client):
     # Arrange
     get_response = csrf_client.get("/register")
     token = _extract_csrf_token(get_response.data)
-    tampered_token = token[:-1] + ("a" if token[-1] != "a" else "b")
+    # Tamper a character in the middle of the token rather than the final
+    # character: the token is base64url-encoded, and when the encoded
+    # payload length is not a multiple of 3 bytes, the last character's
+    # low-order bits are decoder-ignored padding. Mutating only that final
+    # character is therefore not always guaranteed to change the decoded
+    # bytes (observed flakily in practice), whereas any interior character
+    # always carries fully significant, decoder-checked bits.
+    middle_index = len(token) // 2
+    original_character = token[middle_index]
+    replacement_character = "a" if original_character != "a" else "b"
+    tampered_token = (
+        token[:middle_index] + replacement_character + token[middle_index + 1 :]
+    )
 
     # Act
     response = csrf_client.post(
