@@ -1,0 +1,97 @@
+﻿diff --git a/docs/02-architecture.md b/docs/02-architecture.md
+index 90b95ef..9c57a0b 100644
+--- a/docs/02-architecture.md
++++ b/docs/02-architecture.md
+@@ -28,14 +28,14 @@
+ | Component | Proposed file | Responsibility | Depends on | Requirement IDs |
+ |---|---|---|---|---|
+ | Application factory | `src/registration_app/app.py` | Create and configure the Flask app: register blueprint, CSRF, config, teardown hooks | Configuration, Registration blueprint, Database lifecycle | FR-15, NFR-1, NFR-7 |
+-| Configuration | `src/registration_app/config.py` | Hold `SECRET_KEY`, `DATABASE_PATH`, `WTF_CSRF_ENABLED`, `TESTING` sourced from environment/injected config | None | NFR-1, SEC-8 |
++| Configuration | `src/registration_app/config.py` | Hold `SECRET_KEY`, `DATABASE_PATH`, `WTF_CSRF_ENABLED`, `TESTING`, `DEBUG=False`, `MAX_CONTENT_LENGTH` sourced from environment/injected config | None | NFR-1, SEC-8 |
+ | Registration route (blueprint) | `src/registration_app/routes.py` | Handle GET `/register` (render form), POST `/register` (orchestrate validation ΓåÆ repository ΓåÆ redirect), GET `/register/success` (render success page) | Forms, Validation, Repository | FR-1, FR-2, FR-4, FR-5, FR-6, FR-15 |
+ | Forms (CSRF boundary) | `src/registration_app/forms.py` | Define `RegistrationForm(FlaskForm)` carrying the CSRF token and raw field declarations only; no business rules | Flask-WTF | FR-15, SEC-4 |
+ | Validation | `src/registration_app/validation.py` | Pure functions: trim/normalize inputs, enforce length limits, email format, full-name character policy, password strength, confirmation match; return structured field errors | None (pure, no Flask/DB import) | FR-5, FR-7, FR-8, FR-9, FR-12, FR-13, FR-14 |
+ | Password hashing | `src/registration_app/security.py` | Thin wrapper around Werkzeug `generate_password_hash` / `check_password_hash` | Werkzeug | FR-3, SEC-1 |
+ | Database lifecycle | `src/registration_app/db.py` | Open one `sqlite3.Connection` per request lazily via `flask.g`, apply schema on first use, close on `teardown_appcontext` | sqlite3, Configuration | NFR-7, SEC-6 |
+-| Repository | `src/registration_app/repository.py` | `email_exists(normalized_email)`, `create_user(full_name, normalized_email, password_hash)`; parameterized SQL only; commits on success, rolls back and raises a domain-safe error on failure | Database lifecycle | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6 |
+-| Templates and static assets | `src/registration_app/templates/register.html`, `templates/success.html`, `static/css/style.css` | Render form, field errors, and success page through Jinja auto-escaping; no inline business logic | Registration route | FR-1, FR-4, FR-16, NFR-3 |
++| Repository | `src/registration_app/repository.py` | `email_exists(connection, normalized_email)`, `create_user(connection, full_name, normalized_email, password_hash)`; receives an explicit `sqlite3.Connection` parameter (dependency injection) rather than importing `get_db()` internally, so it can be unit-tested directly against a `tmp_path` connection without a Flask application context; parameterized SQL only; commits on success, rolls back and raises a domain-safe `RepositoryError` on failure | Database lifecycle | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6 |
++| Templates and static assets | `src/registration_app/templates/register.html`, `templates/success.html`, `static/css/style.css` | Render form, field errors, and success page through Jinja auto-escaping; `register.html` must render the CSRF hidden field (`{{ form.hidden_tag() }}` or `{{ form.csrf_token }}`) inside the `<form>` element so legitimate submissions are not rejected; no inline business logic | Registration route | FR-1, FR-4, FR-15, FR-16, NFR-3 |
+ 
+ Eight production components, consistent with the "approximately six to eight modules" constraint.
+ 
+@@ -140,9 +140,11 @@ Notes:
+ | SQL injection | All queries in `repository.py` use `?` placeholders; no f-strings/`.format()`/concatenation with user input | SEC-3, EC-18 |
+ | CSRF | Flask-WTF `CSRFProtect` initialized in the application factory; `RegistrationForm` carries the token; real configuration always enables it; tests may set `WTF_CSRF_ENABLED=False` only via explicit test config | SEC-4, FR-15, EC-15, EC-16 |
+ | XSS | All templates use default Jinja auto-escaping; no `|safe`/`Markup` applied to submitted values; full-name field is escaped identically whether it contains normal Unicode text or script-shaped input | SEC-5, FR-16, EC-17 |
+-| Database-error safety | `repository.py` catches `sqlite3.Error`, rolls back, and raises an internal `RepositoryError` carrying no SQL/text/path; `routes.py` catches `RepositoryError` and renders only the generic message | SEC-6, FR-11, EC-14 |
++| Database-error safety | `repository.create_user()` must catch `sqlite3.IntegrityError` **before** the broader `sqlite3.Error`: an `IntegrityError` on the `email` unique constraint always routes to the duplicate-email outcome (not the generic failure message), while any other `sqlite3.Error` rolls back and raises an internal `RepositoryError` carrying no SQL/text/path; `routes.py` catches `RepositoryError` and renders only the generic message | SEC-6, FR-10, FR-11, EC-12, EC-13, EC-14 |
+ | Password-field retention | `routes.py` never passes `password`/`confirm_password` back into the template context on any failure path; only `full_name` and `email` are passed back | SEC-7, FR-6 |
+ | Secret configuration | `config.py` reads `SECRET_KEY` and `DATABASE_PATH` from environment variables with no committed default secret; `.env.example` holds only empty placeholders | SEC-8 |
++| Debug/traceback safety | `config.py` sets `DEBUG=False` in every non-test configuration so Flask never returns an interactive traceback page; application-level exception handling logs only the exception class name and a static safe message, never the raw form data, exception arguments, submitted password, or CSRF token | SEC-6, NFR-2 |
++| Request-size limiting | `config.py` sets `MAX_CONTENT_LENGTH` (for example 16 KB) so Flask rejects an oversized request body with HTTP 413 before it reaches `validation.py`, rather than relying solely on post-parse length checks | FR-14, NFR-5 |
+ 
+ ## 7. Validation Strategy
+ 
+@@ -180,8 +182,14 @@ rule itself (per architecture constraints).
+ - `close_db()` is registered via `app.teardown_appcontext` and closes the connection if one
+   was opened, regardless of whether the request succeeded or failed.
+ - `repository.create_user()` performs the `INSERT`, calls `connection.commit()` only after a
+-  successful execute, and calls `connection.rollback()` in an `except sqlite3.Error` block
+-  before re-raising as `RepositoryError` (FR-11, SEC-6).
++  successful execute, and uses an exception-handling order of `except sqlite3.IntegrityError`
++  (duplicate-email outcome) **then** `except sqlite3.Error` (rollback and re-raise as
++  `RepositoryError`) (FR-10, FR-11, SEC-6).
++- `repository.email_exists()` and `repository.create_user()` both receive the active
++  `sqlite3.Connection` as an explicit parameter from `routes.py` (which obtains it from
++  `db.get_db()`); the repository module never imports or calls `get_db()` itself, so
++  repository unit tests can pass in a `tmp_path` connection directly without a Flask
++  application/request context (NFR-5, testability).
+ - `repository.email_exists()` performs a read-only `SELECT` and does not commit or roll back.
+ - Tests construct the app with a `DATABASE_PATH` pointing at a file under pytest `tmp_path`,
+   so production and tests never share a database file (NFR-6).
+@@ -195,8 +203,8 @@ rule itself (per architecture constraints).
+ | EC-6, EC-7 | `validation.py` | Length boundary enforced exactly at 254/255 characters after trim |
+ | EC-8, EC-9, EC-10 | `validation.py` | Length boundary enforced exactly at 8/128/129 characters |
+ | EC-11 | `validation.py` | Each missing character class produces a password-rule message |
+-| EC-12, EC-13 | `repository.py` via `email_exists()` on the normalized value | Duplicate-email message; no second insert attempted |
+-| EC-14 | `repository.py` via caught `sqlite3.Error` ΓåÆ rollback ΓåÆ `RepositoryError`; `routes.py` catches `RepositoryError` | Generic database-failure message only; no partial row persists |
++| EC-12, EC-13 | `repository.py` via `email_exists()` on the normalized value (pre-insert lookup), and via a caught `sqlite3.IntegrityError` on the `email` unique constraint (concurrent-insert backstop) | Duplicate-email message in both cases; no second account row persists |
++| EC-14 | `repository.py` via caught `sqlite3.Error` (excluding `IntegrityError`, handled above) ΓåÆ rollback ΓåÆ `RepositoryError`; `routes.py` catches `RepositoryError` | Generic database-failure message only; no partial row persists |
+ | EC-15, EC-16 | Flask-WTF `CSRFProtect` (before the route body executes) | Request rejected by Flask-WTF's standard handling; no validation or repository code runs |
+ | EC-17 | `templates/register.html` / `templates/success.html` via Jinja auto-escaping | Rendered as escaped text; no script execution |
+ | EC-18 | `repository.py` parameterized queries | Value bound as data; no injection effect |
+@@ -230,13 +238,13 @@ rule itself (per architecture constraints).
+ - Exact email-format regex pattern: a practical subset will be finalized during implementation
+   and fully unit-tested; no external validation service will be used. **Not Decided** beyond
+   this constraint ΓÇö to be fixed in `validation.py` during Step 5 and reviewed in Step 6.
+-- Exact set of "normal punctuation" characters permitted in Full Name beyond excluding Unicode
+-  control characters: implementation will allow any printable Unicode character that is not in
+-  categories `Cc` (control) or `Cf` (format); this will be confirmed in code review. **Not
+-  Decided** as a precise character whitelist ΓÇö intentionally left permissive per Clarification 3.
+-- Logging format/destination for internal database errors (EC-14): this architecture requires
+-  that logs never contain the submitted password or CSRF token, but the specific logging
+-  configuration (handler, level) is deferred to implementation.
++- Exact set of "normal punctuation" characters permitted in Full Name: implementation rejects
++  only Unicode category `Cc` (control characters), matching FR-13 exactly. No broader category
++  (such as `Cf` format characters) is excluded unless the human explicitly approves a scope
++  change; this was narrowed during Step 3 design review (see `docs/03-design-review.md`, DR-4).
++- Logging format/destination for internal database errors (EC-14): logging configuration
++  (handler, level, rotation) is deferred to implementation, but the logging policy itself is
++  fixed by this architecture ΓÇö see "Debug/traceback safety" in Section 6.
+ 
+ ## 13. Requirement-Coverage Matrix
+ 
+@@ -267,6 +275,12 @@ rule itself (per architecture constraints).
+ | NFR-7 | Database lifecycle |
+ | NFR-8 | Test architecture (Selenium) |
+ 
++## 14. Revision History
++
++| Revision | Date | Trigger | Summary of change |
++|---|---|---|---|
++| 1 | 2026-10-16 | Step 3 design review (`docs/03-design-review.md`) | Applied accepted corrections DR-1ΓÇôDR-6: added debug/traceback and request-size-limiting rows to Section 6; specified `IntegrityError`-before-`Error` exception ordering in Sections 6, 8 and 9 for the duplicate-email race condition; added the CSRF hidden-field requirement to the Templates component and Section 6; changed the Repository component and Section 8 to receive an explicit `sqlite3.Connection` parameter instead of calling `get_db()` internally; narrowed the Full Name control-character policy in Section 12 to Unicode category `Cc` only, removing the unapproved `Cf` extension. |
++
+ ---
+ 
+ **Gate:** Approve step 2 and continue? (yes / changes needed)
