@@ -34,7 +34,7 @@
 | Validation | `src/registration_app/validation.py` | Pure functions: trim/normalize inputs, enforce length limits, email format, full-name character policy, password strength, confirmation match; return structured field errors | None (pure, no Flask/DB import) | FR-5, FR-7, FR-8, FR-9, FR-12, FR-13, FR-14 |
 | Password hashing | `src/registration_app/security.py` | Thin wrapper around Werkzeug `generate_password_hash` / `check_password_hash` | Werkzeug | FR-3, SEC-1 |
 | Database lifecycle | `src/registration_app/db.py` | Open one `sqlite3.Connection` per request lazily via `flask.g`, apply schema on first use, close on `teardown_appcontext` | sqlite3, Configuration | NFR-7, SEC-6 |
-| Repository | `src/registration_app/repository.py` | `email_exists(connection, normalized_email)`, `create_user(connection, full_name, normalized_email, password_hash)`; receives an explicit `sqlite3.Connection` parameter (dependency injection) rather than importing `get_db()` internally, so it can be unit-tested directly against a `tmp_path` connection without a Flask application context; parameterized SQL only; commits on success, rolls back and raises a domain-safe `RepositoryError` on failure | Database lifecycle | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6 |
+| Repository | `src/registration_app/repository.py` | `email_exists(connection, normalized_email)`, `find_user_by_email(connection, normalized_email)` (returns a `sqlite3.Row` or `None`; test/verification-support helper, not used by any production route in this story since login is out of scope), `create_user(connection, full_name, normalized_email, password_hash)`; receives an explicit `sqlite3.Connection` parameter (dependency injection) rather than importing `get_db()` internally, so it can be unit-tested directly against a `tmp_path` connection without a Flask application context; parameterized SQL only; commits on success, rolls back and raises a domain-safe `RepositoryError` on failure | Database lifecycle | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6 |
 | Templates and static assets | `src/registration_app/templates/register.html`, `templates/success.html`, `static/css/style.css` | Render form, field errors, and success page through Jinja auto-escaping; `register.html` must render the CSRF hidden field (`{{ form.hidden_tag() }}` or `{{ form.csrf_token }}`) inside the `<form>` element so legitimate submissions are not rejected; no inline business logic | Registration route | FR-1, FR-4, FR-15, FR-16, NFR-3 |
 
 Eight production components, consistent with the "approximately six to eight modules" constraint.
@@ -191,6 +191,11 @@ rule itself (per architecture constraints).
   repository unit tests can pass in a `tmp_path` connection directly without a Flask
   application/request context (NFR-5, testability).
 - `repository.email_exists()` performs a read-only `SELECT` and does not commit or roll back.
+- `repository.find_user_by_email()` performs a read-only `SELECT` returning the full row (or
+  `None`) and does not commit or roll back; it exists purely to support direct unit/integration
+  verification of inserted data (e.g. confirming `create_user` persisted the expected
+  `full_name`/`email`/`password_hash`). It is not called by any production route in this
+  story, since login/authentication is explicitly out of scope (Requirements Clarification 4).
 - Tests construct the app with a `DATABASE_PATH` pointing at a file under pytest `tmp_path`,
   so production and tests never share a database file (NFR-6).
 
@@ -280,6 +285,7 @@ rule itself (per architecture constraints).
 | Revision | Date | Trigger | Summary of change |
 |---|---|---|---|
 | 1 | 2026-10-16 | Step 3 design review (`docs/03-design-review.md`) | Applied accepted corrections DR-1–DR-6: added debug/traceback and request-size-limiting rows to Section 6; specified `IntegrityError`-before-`Error` exception ordering in Sections 6, 8 and 9 for the duplicate-email race condition; added the CSRF hidden-field requirement to the Templates component and Section 6; changed the Repository component and Section 8 to receive an explicit `sqlite3.Connection` parameter instead of calling `get_db()` internally; narrowed the Full Name control-character policy in Section 12 to Unicode category `Cc` only, removing the unapproved `Cf` extension. |
+| 2 | 2026-10-16 | Step 5 implementation, Task T6 (human-directed scope addition) | Added `find_user_by_email(connection, normalized_email)` to the Repository component (Section 2) and Section 8: a read-only test/verification-support helper returning a `sqlite3.Row` or `None`. Not used by any production route, since login is out of scope; approved explicitly before implementation rather than added silently. |
 
 ---
 
