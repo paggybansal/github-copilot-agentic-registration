@@ -51,11 +51,11 @@ Inspected before naming any file in this plan:
 | ID | Task | Files | Requirement and decision IDs | Blocked by | Done criteria |
 |---|---|---|---|---|---|
 | T1 | Add the Flask-WTF dependency and create the configuration module | `pyproject.toml` (modify: add `Flask-WTF>=1.2,<2.0` to `dependencies`); `src/registration_app/config.py` (new); `tests/test_config.py` (new) | NFR-1, SEC-8, ADD-1, ADD-6, FR-15 | None | `Config` (and a `TestConfig` override) expose `SECRET_KEY`, `DATABASE_PATH`, `WTF_CSRF_ENABLED`, `TESTING`, `DEBUG=False`, `MAX_CONTENT_LENGTH` (16 KB); values are read from environment variables with safe defaults only for non-secret fields; `python -m pytest -q tests/test_config.py` and `ruff check .` both pass |
-| T2 | Create the application-factory skeleton | `src/registration_app/app.py` (new); `tests/test_app.py` (new) | FR-15, NFR-1, ADD-1 | T1 | `create_app(test_config=None)` builds a Flask app from `Config`, applies an optional test-config override, and initializes `CSRFProtect`; no blueprint registered yet; tests confirm the factory returns a configured `Flask` instance and that `TESTING`/`WTF_CSRF_ENABLED` can be overridden; confirm `create_app()` has no parameter, environment variable, or code path that allows `TestConfig` to be selected other than an explicit direct call from test fixtures; add a test proving the default factory call never produces `TestConfig` behavior (CSRF remains enabled, `SECRET_KEY` is not the literal test value); `pytest -q tests/test_app.py` and `ruff check .` pass |
-| T3 | Implement the SQLite schema and per-request connection lifecycle | `src/registration_app/db.py` (new); `src/registration_app/app.py` (modify: register `teardown_appcontext(close_db)`); `tests/test_db.py` (new) | NFR-6, NFR-7, SEC-6 | T2 | `get_db()` lazily opens one `sqlite3.Connection` per application/request context on `flask.g`, applies `CREATE TABLE IF NOT EXISTS users (...)` with the `email TEXT NOT NULL UNIQUE` constraint from architecture Section 5, and reuses the same connection on repeated calls within a context; `close_db()` closes it on teardown; tests use `tmp_path` and an app context; `pytest -q tests/test_db.py` and `ruff check .` pass |
+| T2 | Create the application-factory skeleton and the SQLite schema/per-request connection lifecycle (merged with former T3 — see Section 12 deviation log) | `src/registration_app/app.py` (new); `src/registration_app/db.py` (new); `tests/test_app.py` (new); `tests/test_db.py` (new) | FR-15, NFR-6, NFR-7, SEC-8, ADD-1 | T1 | `create_app(config_class=Config)` builds a Flask app from the given config class and initializes `CSRFProtect`; no blueprint registered yet; tests confirm the factory returns a configured `Flask` instance; confirm `create_app()` has no parameter, environment variable, or code path that allows `TestConfig` to be selected other than an explicit direct call from test fixtures; add a test proving the default factory call never produces `TestConfig` behavior (CSRF remains enabled, `SECRET_KEY` is not the literal test value); `create_app()` raises `RuntimeError` when a real (non-test) config has no `SECRET_KEY` (`TESTING` is not `True`), with tests proving both the raise (unset `FLASK_SECRET_KEY`) and success (set `FLASK_SECRET_KEY`) paths, and that `TestConfig` remains unaffected (SEC-8); `get_db()` lazily opens one `sqlite3.Connection` per application/request context on `flask.g`, applies `CREATE TABLE IF NOT EXISTS users (...)` with the `email TEXT NOT NULL UNIQUE` constraint from architecture Section 5, and reuses the same connection on repeated calls within a context; `close_db()` closes it on teardown, registered via `app.teardown_appcontext(close_db)`; `tests/test_db.py` uses `tmp_path` and an app context; `pytest -q tests/test_app.py tests/test_db.py` and `ruff check .` pass |
+| ~~T3~~ | Merged into T2 (no longer a separate task — see Section 12 deviation log) | — | — | — | — |
 | T4 | Implement validation functions | `src/registration_app/validation.py` (new); `tests/test_validation.py` (new) | FR-5, FR-7, FR-8, FR-9, FR-12, FR-13, FR-14, ADD-4, EC-1–EC-11 | None | Pure functions trim/normalize `full_name`/`email`, leave `password`/`confirm_password` untouched, and enforce every rule in architecture Section 7 (required fields, 100/254/8–128 character boundaries at limit and limit+1, email format, `Cc`-only full-name rejection, password strength, confirmation match); every required validation unit test from the `python-test-standards` skill is present; `pytest -q tests/test_validation.py` and `ruff check .` pass |
 | T5 | Implement the password-hashing helper | `src/registration_app/security.py` (new); `tests/test_security.py` (new) | FR-3, SEC-1 | None | Thin wrapper functions call only Werkzeug `generate_password_hash`/`check_password_hash`; tests confirm the hash differs from the plain password and that verification succeeds for the correct password and fails for an incorrect one; `pytest -q tests/test_security.py` and `ruff check .` pass |
-| T6 | Implement the user repository | `src/registration_app/repository.py` (new); `tests/test_repository.py` (new) | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6, ADD-2, ADD-5, EC-12, EC-13, EC-14, EC-18 | T3 | `email_exists(connection, normalized_email)` and `create_user(connection, full_name, normalized_email, password_hash)` accept an explicit `sqlite3.Connection` (no internal `get_db()` call); `create_user` catches `sqlite3.IntegrityError` before the broader `sqlite3.Error`, converting the former to a duplicate-email outcome and the latter to a rollback plus `RepositoryError` with no SQL/path in its message; tests use a `tmp_path` connection directly and include an SQL-injection-shaped `full_name`/`email` value stored safely as data; `pytest -q tests/test_repository.py` and `ruff check .` pass |
+| T6 | Implement the user repository | `src/registration_app/repository.py` (new); `tests/test_repository.py` (new) | FR-2, FR-10, FR-11, SEC-2, SEC-3, SEC-6, ADD-2, ADD-5, EC-12, EC-13, EC-14, EC-18 | T2 | `email_exists(connection, normalized_email)` and `create_user(connection, full_name, normalized_email, password_hash)` accept an explicit `sqlite3.Connection` (no internal `get_db()` call); `create_user` catches `sqlite3.IntegrityError` before the broader `sqlite3.Error`, converting the former to a duplicate-email outcome and the latter to a rollback plus `RepositoryError` with no SQL/path in its message; tests use a `tmp_path` connection directly and include an SQL-injection-shaped `full_name`/`email` value stored safely as data; `pytest -q tests/test_repository.py` and `ruff check .` pass |
 | T7 | Create the registration and success templates and stylesheet | `src/registration_app/templates/register.html` (new); `src/registration_app/templates/success.html` (new); `src/registration_app/static/css/style.css` (new); `tests/test_templates.py` (new) | FR-1, FR-4, FR-15 (ADD-3), FR-16, NFR-3 | T2 | `register.html` renders Full Name, Email, Password, Confirm Password, a Register button, per-field error placeholders, and the CSRF hidden field (`{{ form.csrf_token }}`); `success.html` renders only `Registration successful` with no submitted data; both rely solely on Jinja's default auto-escaping (no `|safe`/`Markup`); a template-rendering test (using `render_template` inside an app context with a stub context including an XSS-shaped name) confirms the CSRF field is present and the name is escaped as text; `pytest -q tests/test_templates.py` and `ruff check .` pass |
 | T8 | Implement the registration route, form, and CSRF wiring | `src/registration_app/forms.py` (new); `src/registration_app/routes.py` (new); `src/registration_app/app.py` (modify: register the registration blueprint); `tests/test_routes.py` (new) | FR-1, FR-2, FR-4, FR-5, FR-6, FR-10, FR-11, FR-15, SEC-4, SEC-7, ADD-1, ADD-2, ADD-3, ADD-5, EC-1–EC-14, EC-17, EC-19 | T4, T5, T6, T7 | GET `/register` returns HTTP 200 with the form; POST `/register` with valid data creates exactly one account, redirects (POST-Redirect-GET) to `/register/success`, which shows only `Registration successful`; every validation, duplicate-email, and simulated-database-failure path (via a monkeypatched repository raising `RepositoryError`) returns HTTP 200 with the exact required message, retains Full Name/Email, and clears both password fields; the plain password never appears in any response; the full Flask-integration test list from the `python-test-standards` skill (excluding the dedicated CSRF tests in T9) passes; `tests/test_routes.py` additionally includes, in this same task, a baseline CSRF test asserting a POST with a valid token succeeds and a POST with no CSRF token at all is rejected (HTTP 400), so SEC-4 has an associated same-task test obligation; T9 only adds the deeper invalid-token-rejected case and further edge-case tests on top of this baseline; `pytest -q -m "not ui" tests/test_routes.py` and `ruff check .` pass |
 | T9 | Add CSRF-specific and security edge-case tests | `tests/test_csrf.py` (new); `tests/test_security_edge_cases.py` (new) | SEC-4, NFR-2, ADD-1, EC-15, EC-16 | T8 | Dedicated tests prove a valid CSRF token is accepted, a missing token is rejected, and an invalid token is rejected (real CSRF configuration, not the test override); additional tests use `caplog` to confirm the submitted password and CSRF token never appear in application logs, and confirm no `.env`, private key, credential, or SQLite database file is tracked by Git (via `git ls-files`); `pytest -q -m "not ui"` (full suite) and `ruff check .` pass; `python -m pytest --cov=src/registration_app --cov-report=term-missing` reports at least 85% |
@@ -124,10 +124,9 @@ The existing `quality` (4-way OS/Python matrix) and `dependency-audit` jobs are 
 
 ```mermaid
 flowchart TD
-    T1[T1 Config + Flask-WTF dependency] --> T2[T2 App factory]
-    T2 --> T3[T3 DB lifecycle]
+    T1[T1 Config + Flask-WTF dependency] --> T2[T2 App factory + DB lifecycle]
     T2 --> T7[T7 Templates + CSS]
-    T3 --> T6[T6 Repository]
+    T2 --> T6[T6 Repository]
     T4[T4 Validation] --> T8
     T5[T5 Password hashing] --> T8
     T6 --> T8[T8 Route + Form + CSRF]
@@ -145,11 +144,12 @@ the convergence already shown; T12 is explicitly **Blocked by: T11** in Section 
 
 ## 5. Explicit Blocked-Task Register
 
-No task is currently blocked. All twelve tasks have their prerequisites satisfied by a
-lower-numbered task in this plan or by already-approved artifacts (`docs/01-requirements.md`,
-`docs/02-architecture.md`, `docs/03-design-review.md`). T12 is explicitly gated on T11's
-completion (its Selenium fixture and tests must exist before the CI browser job that runs
-them can be meaningfully added and validated locally).
+No task is currently blocked. All eleven remaining tasks (T1, T2, T4–T12; former T3 is merged
+into T2) have their prerequisites satisfied by a lower-numbered task in this plan or by
+already-approved artifacts (`docs/01-requirements.md`, `docs/02-architecture.md`,
+`docs/03-design-review.md`). T12 is explicitly gated on T11's completion (its Selenium fixture
+and tests must exist before the CI browser job that runs them can be meaningfully added and
+validated locally).
 
 ## 6. Requirement-to-Task Mapping
 
@@ -165,19 +165,19 @@ them can be meaningfully added and validated locally).
 | FR-8 | T4 |
 | FR-9 | T4 |
 | FR-10 | T6, T8 |
-| FR-11 | T3, T6, T8 |
+| FR-11 | T2, T6, T8 |
 | FR-12 | T4 |
 | FR-13 | T4 |
 | FR-14 | T1, T4 |
 | FR-15 | T1, T2, T7, T8 |
 | FR-16 | T7 |
-| NFR-1 | T1, T2 |
+| NFR-1 | T1 |
 | NFR-2 | T5, T8, T9 |
 | NFR-3 | T7 |
 | NFR-4 | T10 |
 | NFR-5 | T1 (size limit), all tasks (testability by design) |
-| NFR-6 | T3, all test tasks |
-| NFR-7 | T3 |
+| NFR-6 | T2, all test tasks |
+| NFR-7 | T2 |
 | NFR-8 | T11, T12 (CI job runs the headless-Chrome Selenium tests on every push/PR) |
 | EC-1–EC-5 | T4, T8 |
 | EC-6, EC-7 | T4, T8 |
@@ -208,8 +208,7 @@ push/PR, not merely locally).
 | Test layer | Task | Test file(s) |
 |---|---|---|
 | Configuration unit tests | T1 | `tests/test_config.py` |
-| Application-factory unit tests | T2 | `tests/test_app.py` |
-| Database lifecycle tests | T3 | `tests/test_db.py` |
+| Application-factory and database lifecycle unit tests | T2 | `tests/test_app.py`, `tests/test_db.py` |
 | Validation unit tests | T4 | `tests/test_validation.py` |
 | Password-hashing unit tests | T5 | `tests/test_security.py` |
 | Repository tests | T6 | `tests/test_repository.py` |
@@ -223,15 +222,15 @@ push/PR, not merely locally).
 
 ## 8. Critical Path
 
-`T1 → T2 → T3 → T6 → T8 → T11 → T12`
+`T1 → T2 → T6 → T8 → T11 → T12`
 
 T4 (validation) and T5 (password hashing) are pure modules with no production dependency and
-can be implemented in parallel with T2/T3, but both must be complete before T8 begins. T7
-(templates) depends only on T2 and can also proceed in parallel with T3–T6. T9 and T10 depend
+can be implemented in parallel with T2, but both must be complete before T8 begins. T7
+(templates) depends only on T2 and can also proceed in parallel with T2–T6. T9 and T10 depend
 only on T8 and can run in parallel with T11, but **T12 is now blocked specifically by T11**
 (not merely by the T9/T10/T11 convergence), because the CI browser job added in T12 only
 makes sense once T11's Selenium tests and fixture exist. The longest chain determining
-overall completion is therefore `T1 → T2 → T3 → T6 → T8 → T11 → T12`; T9 and T10 must also
+overall completion is therefore `T1 → T2 → T6 → T8 → T11 → T12`; T9 and T10 must also
 complete before T12's done criteria are met, but they are not on the longest path.
 
 ## 9. Risks and Rollback
@@ -291,6 +290,9 @@ complete:
 **Forward-looking safety note for T2:** the application factory must not provide any
 environment-variable or request-driven mechanism capable of selecting `TestConfig`. `TestConfig`
 may only be passed explicitly by test fixtures calling the factory directly.
+
+| T2 (verification) | A pre-implementation review found (a) `NFR-1` was too loosely attributed to T2 — `app.py`/`db.py` contain no Python-version-gating logic; NFR-1 is satisfied only by `pyproject.toml`'s `requires-python` (T1) and the CI matrix (T12); (b) `SEC-6` (rollback + generic failure message) was too loosely attributed to T2 — that behavior is implemented by `repository.py`'s exception handling (T6), not by `db.py`'s connection lifecycle; (c) `Config.SECRET_KEY` silently fell back to an empty string (`os.environ.get("FLASK_SECRET_KEY", "")`) when unset — a real defect, not an accepted deviation. | Human-directed verification before the T2 approval gate. | T2's ID column corrected to `FR-15, NFR-6, NFR-7, SEC-8, ADD-1` (NFR-1 and SEC-6 removed; SEC-8 added, since `create_app()` now enforces it). Section 6's `NFR-1` mapping corrected to `T1` only. `app.py` now raises `RuntimeError` in `create_app()` when a real (non-`TESTING`) config has no `SECRET_KEY`; `TestConfig` is unaffected. Two new tests added in `tests/test_app.py` proving the raise (unset `FLASK_SECRET_KEY`) and the success path (set `FLASK_SECRET_KEY`), plus one confirming `TestConfig` still works without the environment variable. |
+| T2/T3 | The originally separate T3 ("Implement the SQLite schema and per-request connection lifecycle") was merged into T2 rather than implemented as its own task/approval cycle. | Explicit human decision during the Step 5 T2 cycle: the application factory and the DB schema/lifecycle were implemented together in one task. | T3's row in Section 3 is struck through and marked "Merged into T2 — no longer a separate task." T2's files, requirement IDs, and done criteria were expanded to include `db.py`, `tests/test_db.py`, NFR-6, NFR-7, and SEC-6. The dependency graph, blocked-task register, requirement mapping, test-plan mapping, and critical path (Sections 4–8) were all updated accordingly. `create_app(test_config=None)` was also changed to `create_app(config_class=Config)` to match the actual T2 implementation signature. |
 
 ---
 
