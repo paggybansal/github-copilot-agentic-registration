@@ -83,3 +83,38 @@ During implementation, complete one plan task at a time and ask:
 - Never use `git reset --hard`.
 - Never rewrite committed history without explicit permission.
 - Never merge a pull request without explicit human approval.
+
+## Reusable skills
+
+Before performing relevant work, read:
+
+- `.github/skills/sdlc-documentation/SKILL.md` when creating or reviewing SDLC artifacts;
+- `.github/skills/registration-security/SKILL.md` when designing, implementing, reviewing,
+  or verifying registration security;
+- `.github/skills/python-test-standards/SKILL.md` when creating, reviewing, or running tests.
+
+If native skill discovery is unavailable in the installed PyCharm Copilot plugin, read the
+skill files explicitly.
+
+Do not claim native skill invocation when explicit-file fallback was used.
+
+## Deterministic repository controls
+
+This repository uses version-controlled Git lifecycle hooks:
+
+- `.githooks/pre-commit` runs `scripts/pre_commit_check.py`;
+- `.githooks/pre-push` runs `scripts/quality_gate.py`.
+
+GitHub Actions repeats the quality checks independently after push.
+
+These are Git lifecycle and CI controls. They must not be described as native Copilot
+tool-call hooks.
+
+Before committing:
+
+1. Confirm no `.env`, private key, credential, secret, or SQLite database is staged.
+2. Run `python scripts/pre_commit_check.py`.
+3. From Step 5 onward, run `python scripts/quality_gate.py`.
+
+Never bypass a hook using `--no-verify` unless the human explicitly approves it and the
+reason is recorded in the relevant SDLC artifact.

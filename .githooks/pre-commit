@@ -1,0 +1,11 @@
+#!/bin/sh
+
+python scripts/pre_commit_check.py
+exit_code=$?
+
+if [ "$exit_code" -ne 0 ]; then
+    echo "Commit blocked by the repository security gate."
+    exit "$exit_code"
+fi
+
+exit 0

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+python scripts/quality_gate.py
+exit_code=$?
+
+if [ "$exit_code" -ne 0 ]; then
+    echo "Push blocked by the repository quality gate."
+    exit "$exit_code"
+fi
+
+exit 0
