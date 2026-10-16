@@ -20,6 +20,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A dedicated `browser-tests` CI job (`.github/workflows/ci.yml`) that runs the headless
   Chrome Selenium UI tests on `ubuntu-latest` and uploads failure screenshots as a build
   artifact.
+- SDLC Step 6 code review (`docs/05-code-review.md`, Approved) and Step 7 verification
+  (`docs/06-verification.md`, Pass across all 15 verification scenarios) artifacts for
+  REG-1.
 
 ### Changed
 
