@@ -1,0 +1,80 @@
+/* Minimal, accessible styling for the registration form and success page. */
+
+:root {
+    color-scheme: light;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background-color: #f7f7f8;
+    color: #1a1a1a;
+}
+
+main {
+    max-width: 32rem;
+    margin: 0 auto;
+    background-color: #ffffff;
+    border: 1px solid #d9d9df;
+    border-radius: 0.5rem;
+    padding: 2rem;
+}
+
+h1 {
+    font-size: 1.5rem;
+    margin-top: 0;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+label {
+    font-weight: 600;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #a9a9b3;
+    border-radius: 0.3rem;
+    font-size: 1rem;
+}
+
+input:focus {
+    outline: 2px solid #2454ff;
+    outline-offset: 1px;
+}
+
+.field-errors {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #b00020;
+    font-size: 0.9rem;
+}
+
+button[type="submit"] {
+    align-self: flex-start;
+    padding: 0.6rem 1.4rem;
+    background-color: #2454ff;
+    color: #ffffff;
+    border: none;
+    border-radius: 0.3rem;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+button[type="submit"]:hover,
+button[type="submit"]:focus {
+    background-color: #1a3fcf;
+}
