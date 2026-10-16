@@ -5,8 +5,16 @@
 {% block content %}
 <h1>Create an account</h1>
 
+{% if errors and errors.general %}
+<ul class="field-errors" id="general-errors">
+    {% for message in errors.general %}
+    <li>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
 <form method="post" action="/register" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {{ form.csrf_token }}
 
     <div class="field">
         <label for="full_name">Full Name</label>

@@ -1,9 +1,9 @@
 """Template-rendering tests for the base layout, registration, and success
 templates (T7).
 
-``routes.py`` does not exist yet (T8), so these tests call ``render_template``
-directly inside an app/request context with a stub context dict, per the
-plan's T7 done criteria.
+These tests call ``render_template`` directly inside a request context with a
+stub context dict and a real ``RegistrationForm`` instance, so ``form.csrf_token``
+resolves exactly as it does when rendered from ``routes.py`` (T8).
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from flask import render_template
 
 from registration_app.app import create_app
 from registration_app.config import Config
+from registration_app.forms import RegistrationForm
 
 
 def _make_app(tmp_path):
@@ -29,10 +30,11 @@ def test_register_template_renders_csrf_hidden_field(tmp_path):
 
     with app.test_request_context("/register"):
         html = render_template(
-            "register.html", full_name="", email="", errors={}
+            "register.html", form=RegistrationForm(), full_name="", email="", errors={}
         )
 
-    assert '<input type="hidden" name="csrf_token" value="' in html
+    assert 'name="csrf_token"' in html
+    assert 'type="hidden"' in html
 
 
 def test_register_template_password_fields_render_empty(tmp_path):
@@ -40,7 +42,7 @@ def test_register_template_password_fields_render_empty(tmp_path):
 
     with app.test_request_context("/register"):
         html = render_template(
-            "register.html", full_name="", email="", errors={}
+            "register.html", form=RegistrationForm(), full_name="", email="", errors={}
         )
 
     assert 'id="password"' in html
@@ -55,6 +57,7 @@ def test_register_template_retains_full_name_and_email_on_redisplay(tmp_path):
     with app.test_request_context("/register"):
         html = render_template(
             "register.html",
+            form=RegistrationForm(),
             full_name="New User",
             email="new.user@example.test",
             errors={},
@@ -70,6 +73,7 @@ def test_register_template_renders_field_specific_errors(tmp_path):
     with app.test_request_context("/register"):
         html = render_template(
             "register.html",
+            form=RegistrationForm(),
             full_name="",
             email="",
             errors={"email": ["Enter a valid email address"]},
@@ -85,7 +89,11 @@ def test_register_template_escapes_xss_shaped_full_name(tmp_path):
 
     with app.test_request_context("/register"):
         html = render_template(
-            "register.html", full_name=malicious_name, email="", errors={}
+            "register.html",
+            form=RegistrationForm(),
+            full_name=malicious_name,
+            email="",
+            errors={},
         )
 
     assert "<script>alert" not in html

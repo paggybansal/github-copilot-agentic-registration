@@ -1,9 +1,9 @@
 """Application factory for the registration service.
 
 ``create_app`` builds a configured :class:`flask.Flask` instance from an
-explicit configuration class, initializes CSRF protection (DR-3), and wires up
-the per-request database connection lifecycle. No blueprint is registered yet;
-routes are added in a later implementation task.
+explicit configuration class, initializes CSRF protection (DR-3), wires up
+the per-request database connection lifecycle, and registers the
+registration blueprint (T8).
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from flask_wtf import CSRFProtect
 
 from registration_app import db
 from registration_app.config import Config
+from registration_app.routes import bp as registration_bp
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
@@ -38,5 +39,6 @@ def create_app(config_class: type[Config] = Config) -> Flask:
 
     CSRFProtect(app)
     db.init_app(app)
+    app.register_blueprint(registration_bp)
 
     return app
