@@ -1,0 +1,8 @@
+﻿Folder PATH listing
+Volume serial number is 000001B8 F836:96DB
+C:\USERS\PARAG_BANSAL\PYCHARMPROJECTS\GITHUB\GITHUB-COPILOT-AGENTIC-REGISTRATION\.GITHOOKS
+    pre-commit
+    pre-push
+    
+No subfolders exist 
+

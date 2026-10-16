@@ -1,0 +1,35 @@
+﻿Folder PATH listing
+Volume serial number is 0000019C F836:96DB
+C:\USERS\PARAG_BANSAL\PYCHARMPROJECTS\GITHUB\GITHUB-COPILOT-AGENTIC-REGISTRATION\.GITHUB
+|   AGENTIC_SDLC_PROCESS.md
+|   copilot-instructions.md
+|   pull_request_template.md
+|   
++---agents
+|       1-requirements-analyst.agent.md
+|       2-solution-architect.agent.md
+|       3-design-reviewer.agent.md
+|       4-implementation-planner.agent.md
+|       5-implementer.agent.md
+|       6-code-reviewer.agent.md
+|       7-verifier.agent.md
+|       8-pr-author.agent.md
+|       
++---prompts
+|       sdlc-run.prompt.md
+|       sdlc-status.prompt.md
+|       sdlc-step.prompt.md
+|       
++---skills
+|   +---python-test-standards
+|   |       SKILL.md
+|   |       
+|   +---registration-security
+|   |       SKILL.md
+|   |       
+|   \---sdlc-documentation
+|           SKILL.md
+|           
+\---workflows
+        ci.yml
+        

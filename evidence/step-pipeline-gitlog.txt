@@ -1,0 +1,4 @@
+﻿0ac38d7 feat(pipeline): add Copilot skills, prompts, hooks and CI
+99d26dd feat(pipeline): add eight GitHub Copilot SDLC agents
+662fa88 chore(step-0): scaffold GitHub Copilot registration capstone
+fbc7522 chore(step-0): scaffold GitHub Copilot registration capstone
